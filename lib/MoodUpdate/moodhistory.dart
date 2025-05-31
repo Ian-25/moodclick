@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class MoodHistoryScreen extends StatelessWidget {
+  const MoodHistoryScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -11,31 +13,41 @@ class MoodHistoryScreen extends StatelessWidget {
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('moodupdatehistory')
-            .where('email', isEqualTo: FirebaseAuth.instance.currentUser?.email)
+            .collection('moodupdate')
+            .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
             .orderBy('timestamp', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
+          final docs = snapshot.data!.docs;
+          if (docs.isEmpty) {
+            return const Center(child: Text('No mood updates yet'));
+          }
+
           return ListView.builder(
-            itemCount: snapshot.data!.docs.length,
+            itemCount: docs.length,
             itemBuilder: (context, index) {
-              var data =
-                  snapshot.data!.docs[index].data() as Map<String, dynamic>;
+              var data = docs[index].data() as Map<String, dynamic>;
               DateTime date = (data['timestamp'] as Timestamp).toDate();
               String moodEmoji =
                   data['moodEmoji'] ?? getMoodEmoji(data['mood']);
+              String note = data['note'] ?? '';
 
               return Card(
                 elevation: 3,
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: ListTile(
                   leading: CircleAvatar(
-                    child: Text(moodEmoji),
                     backgroundColor: Colors.transparent,
+                    child:
+                        Text(moodEmoji, style: const TextStyle(fontSize: 24)),
                   ),
                   title: Row(
                     children: [
@@ -43,17 +55,24 @@ class MoodHistoryScreen extends StatelessWidget {
                         data['mood'],
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(width: 8),
-                      Text(moodEmoji),
                     ],
                   ),
-                  subtitle: Text(
-                    formatDateTime(date),
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  trailing: Text(
-                    data['note'] ?? '',
-                    style: const TextStyle(fontStyle: FontStyle.italic),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        formatDateTime(date),
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      if (note.isNotEmpty)
+                        Text(
+                          note,
+                          style: const TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: Colors.black87,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               );
@@ -94,7 +113,8 @@ class MoodUpdateService {
       {String? customEmoji}) async {
     final user = _auth.currentUser;
     if (user != null) {
-      await _firestore.collection('moodupdatehistory').add({
+      await _firestore.collection('moodupdate').add({
+        'userId': user.uid,
         'email': user.email,
         'mood': mood,
         'note': note,

@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:moodapp/Services/auth_service.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,23 +17,34 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscureText = true; // Add this line
 
   void _login() async {
+    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+      Fluttertoast.showToast(
+        msg: "Please enter both email and password",
+        backgroundColor: Colors.red,
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
-    UserCredential? userCredential = await AuthService().signin(
-      email: emailController.text,
-      password: passwordController.text,
-      context: context,
-    );
+    try {
+      final authService = AuthService();
+      final userCredential = await authService.signin(
+        context: context,
+        email: emailController.text.trim(),
+        password: passwordController.text,
+      );
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (userCredential != null) {
-        Navigator.pushNamed(context, '/moodupdate'); // Navigate to home screen
+      if (userCredential != null && mounted) {
+        Navigator.pushReplacementNamed(context, '/moodupdate');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -55,10 +67,10 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 50),
+                const SizedBox(height: 40),
                 Center(
                   child: Image.asset(
-                    'assets/MoodClick.png', // Path to your logo image
+                    'assets/LoGo.png', // Path to your logo image
                     height: MediaQuery.of(context).size.height * 0.2,
                   ),
                 ),

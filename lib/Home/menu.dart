@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:moodapp/Burgerbuttonfunc/SpeAdvice.dart';
-import 'package:moodapp/Burgerbuttonfunc/councelling.dart';
+import 'package:moodapp/Burgerbuttonfunc/Appointment.dart';
+import 'package:moodapp/Burgerbuttonfunc/appoint.status.dart';
+import 'package:moodapp/Burgerbuttonfunc/privacypolicy.dart';
+import 'package:moodapp/Burgerbuttonfunc/wellness.dart';
 import 'package:moodapp/Home/home.dart';
 import 'package:moodapp/Login Signup/login.dart';
 import 'package:moodapp/Services/auth_service.dart';
@@ -48,7 +51,7 @@ class BurgerButton extends StatefulWidget {
   const BurgerButton({super.key});
 
   @override
-  _BurgerButtonState createState() => _BurgerButtonState();
+  State<BurgerButton> createState() => _BurgerButtonState();
 }
 
 class _BurgerButtonState extends State<BurgerButton> {
@@ -62,9 +65,11 @@ class _BurgerButtonState extends State<BurgerButton> {
 
   void _loadNickname() async {
     var userDetails = await AuthService().getUserDetails();
-    setState(() {
-      nickname = userDetails['nickname'] ?? '';
-    });
+    if (mounted) {
+      setState(() {
+        nickname = userDetails['nickname'] ?? '';
+      });
+    }
   }
 
   @override
@@ -81,73 +86,78 @@ class _BurgerButtonState extends State<BurgerButton> {
               child: Icon(Icons.person, color: Colors.white),
             ),
             decoration: const BoxDecoration(
-              color: Colors.blue,
+              color: Color.fromARGB(255, 243, 33, 33),
             ),
           ),
-          const Divider(),
-          DrawerItem(
-            title: 'Home',
-            icon: Icons.home,
+          ListTile(
+            leading: const Icon(Icons.home),
+            title: const Text('Home'),
             onTap: () {
-              Navigator.pop(context); // Close the drawer
-              Navigator.pushReplacement(context,
-                  MaterialPageRoute(builder: (context) => const HomeScreen()));
-            },
-          ),
-          DrawerItem(
-            title: 'Counsellors Advice',
-            icon: Icons.message,
-            onTap: () {
-              Navigator.pop(context); // Close the drawer
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          const SpeAdvice(moodIssue: 'The Counsellors')));
-            },
-          ),
-          DrawerItem(
-            title: 'Contact for Counselling',
-            icon: Icons.contact_phone,
-            onTap: () {
-              Navigator.pop(context); // Close the drawer
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>CounsellorsProfilePage()));
-            },
-          ),
-          DrawerItem(
-            title: 'Terms and Conditions',
-            icon: Icons.description,
-            onTap: () {
-              Navigator.pop(context); // Close the drawer
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => const TermsScreen()));
-            },
-          ),
-          DrawerItem(
-            title: 'Privacy Policy',
-            icon: Icons.privacy_tip,
-            onTap: () {
-              Navigator.pop(context); // Close the drawer
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const PrivacyPolicyScreen()));
-            },
-          ),
-          const Divider(),
-          DrawerItem(
-            title: 'Logout',
-            icon: Icons.logout,
-            onTap: () async {
-              await AuthService().signout(context: context);
-              Navigator.pop(context); // Close the drawer
+              Navigator.pop(context);
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
               );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.calendar_month),
+            title: const Text('Book Appointment'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AppointmentPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.pending_actions),
+            title: const Text('Appointment Status'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AppointmentStatus()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.self_improvement),
+            title: const Text('Wellness Corner'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const WellnessPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip),
+            title: const Text('Privacy Policy'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PrivacyPolicy()),
+              );
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Logout', style: TextStyle(color: Colors.red)),
+            onTap: () async {
+              await AuthService().signout(context: context);
+              if (context.mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                );
+              }
             },
           ),
         ],
@@ -161,7 +171,8 @@ class DrawerItem extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const DrawerItem({super.key, 
+  const DrawerItem({
+    super.key,
     required this.title,
     required this.icon,
     required this.onTap,

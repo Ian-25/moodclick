@@ -102,7 +102,7 @@ class _ForgotpassState extends State<Forgotpass> {
                       ),
                     ),
                     child: const Text(
-                      "Send Reset Email",
+                      " Reset Password",
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

@@ -1,122 +1,98 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MoodClickApp());
-}
-
-class MoodClickApp extends StatelessWidget {
-  const MoodClickApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: AdvicePage(),
-    );
-  }
-}
-
-class AdvicePage extends StatefulWidget {
-  const AdvicePage({super.key});
-
-  @override
-  _AdvicePageState createState() => _AdvicePageState();
-}
-
-class _AdvicePageState extends State<AdvicePage> {
-  final TextEditingController _controller = TextEditingController();
-  final List<Map<String, String>> _messages =
-      []; // Stores messages with timestamps
-
-  void _sendMessage() {
-    final message = _controller.text.trim();
-    if (message.isNotEmpty) {
-      setState(() {
-        _messages.add({
-          'text': message,
-          'time': DateTime.now()
-              .toLocal()
-              .toString()
-              .split(' ')[1]
-              .split('.')[0], // Get time part
-        });
-        _controller.clear();
-      });
-    }
-  }
+class PrivacyPolicy extends StatelessWidget {
+  const PrivacyPolicy({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context); // Navigate back
-          },
-        ),
-        title: const Text('Specialist Advice'),
+        title: const Text('Privacy Policy'),
+        backgroundColor: const Color.fromARGB(255, 243, 33, 33),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      margin: const EdgeInsets.only(bottom: 8.0),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[100],
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(_messages[index]['text']!),
-                          const SizedBox(height: 4),
-                          Text(
-                            _messages[index]['time']!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text(
+              'Privacy Policy',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    decoration: InputDecoration(
-                      hintText: 'Type message ...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20.0),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8.0),
-                ElevatedButton(
-                  onPressed: _sendMessage,
-                  child: const Text('Send'),
-                ),
-              ],
+            SizedBox(height: 16),
+            Text(
+              '1. Introduction',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          ),
-        ],
+            SizedBox(height: 8),
+            Text(
+              'Welcome to our mobile application. We are committed to protecting your personal information and your right to privacy. If you have any questions or concerns about our policy, or our practices with regards to your personal information, please contact us.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              '2. Information We Collect',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'We collect personal information that you voluntarily provide to us when registering at the app, expressing an interest in obtaining information about us or our products and services, when participating in activities on the app, or otherwise contacting us.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              '3. How We Use Your Information',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'We use personal information collected via our app for a variety of business purposes described below. We process your personal information for these purposes in reliance on our legitimate business interests, in order to enter into or perform a contract with you, with your consent, and/or for compliance with our legal obligations.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              '4. Sharing Your Information',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'We only share information with your consent, to comply with laws, to provide you with services, to protect your rights, or to fulfill business obligations.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              '5. Security of Your Information',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              '6. Your Privacy Rights',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'In the Zppu campus, you have rights that allow you greater access to and control over your personal information. You may review, change, or terminate your account at any time.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              '7. Changes to This Privacy Policy',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'We may update this privacy policy from time to time in order to reflect, for example, changes to our practices or for other operational, legal, or regulatory reasons.',
+            ),
+            SizedBox(height: 16),
+            Text(
+              '8. Contact Us',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'If you have questions or comments about this policy, you may contact us by email at: support@moodapp.com',
+            ),
+          ],
+        ),
       ),
     );
   }

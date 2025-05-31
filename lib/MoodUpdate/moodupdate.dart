@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 // Import the necessary package for user credentials
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,8 +17,9 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
+  @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: MoodSelectorScreen(),
     );
@@ -33,6 +36,8 @@ class MoodSelectorScreen extends StatefulWidget {
 class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
   String mood = "Happy"; // Default mood
   String nickname = "User"; // Default nickname
+  bool _isDisposed = false;
+  StreamSubscription<DocumentSnapshot>? _userSubscription;
 
   @override
   void initState() {
@@ -40,44 +45,94 @@ class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
     _loadUserNickname();
   }
 
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _userSubscription?.cancel(); // Cancel subscription
+    super.dispose();
+  }
+
+  // Safe setState wrapper
+  void _safeSetState(VoidCallback fn) {
+    if (!_isDisposed && mounted) {
+      setState(fn);
+    }
+  }
+
   void _loadUserNickname() async {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      setState(() {
-        nickname = userDoc['nickname'] ?? "User";
-      });
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // Use stream subscription instead of one-time get
+        _userSubscription = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .snapshots()
+            .listen((userDoc) {
+          _safeSetState(() {
+            nickname = userDoc.get('nickname') ?? "User";
+          });
+        });
+      }
+    } catch (e) {
+      print('Error loading nickname: $e');
     }
   }
 
   void setMood(String newMood) {
-    setState(() {
+    _safeSetState(() {
       mood = newMood;
     });
   }
 
-  void _updateMoodInFirestore(String newMood) async {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      DocumentReference moodUpdateRef =
-          await FirebaseFirestore.instance.collection('moodupdate').add({
-        'nickname': nickname,
-        'mood': newMood,
-        'timestamp': Timestamp.now(),
-      });
+  Future<void> _updateMoodInFirestore(String newMood) async {
+    if (_isDisposed) return;
 
-      // Update the admin_dashboard collection
-      await FirebaseFirestore.instance
-          .collection('admin_dashboard')
-          .doc(moodUpdateRef.id)
-          .set({
-        'nickname': nickname,
-        'mood': newMood,
-        'timestamp': Timestamp.now(),
-      });
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null && mounted) {
+        // Use batch write for atomic operations
+        WriteBatch batch = FirebaseFirestore.instance.batch();
+
+        DocumentReference moodRef =
+            FirebaseFirestore.instance.collection('moodupdate').doc();
+        DocumentReference dashboardRef = FirebaseFirestore.instance
+            .collection('admin_dashboard')
+            .doc(moodRef.id);
+
+        final moodData = {
+          'nickname': nickname,
+          'mood': newMood,
+          'timestamp': FieldValue.serverTimestamp(),
+          'userId': user.uid,
+        };
+
+        batch.set(moodRef, moodData);
+        batch.set(dashboardRef, moodData);
+        await batch.commit();
+
+        if (!_isDisposed && mounted) {
+          Fluttertoast.showToast(
+            msg: "Mood Update Successfully",
+            backgroundColor: Colors.green,
+          );
+
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error updating mood: $e');
+      if (!_isDisposed && mounted) {
+        Fluttertoast.showToast(
+          msg: "Failed to update mood",
+          backgroundColor: Colors.red,
+        );
+      }
     }
   }
 
@@ -121,32 +176,32 @@ class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
       case "Sad":
         backgroundColor = Colors.orangeAccent;
         emoji = "😞"; // Sad emoji
-        moodText = "I’m Feeling Sad";
+        moodText = "I'm Feeling Sad";
         moodColor = Colors.orange;
         break;
       case "Disappointed":
         backgroundColor = Colors.brown.shade300;
         emoji = "😟"; // Disappointed emoji
-        moodText = "I’m Feeling Disappointed";
+        moodText = "I'm Feeling Disappointed";
         moodColor = Colors.brown;
         break;
       case "Scared":
         backgroundColor = Colors.blueAccent;
         emoji = "😨"; // Scared emoji
-        moodText = "I’m Feeling Scared";
+        moodText = "I'm Feeling Scared";
         moodColor = Colors.blue;
         break;
       case "Angry":
         backgroundColor = Colors.redAccent;
         emoji = "😡"; // Angry emoji
-        moodText = "I’m Feeling Angry";
+        moodText = "I'm Feeling Angry";
         moodColor = Colors.red;
         break;
       case "Happy":
       default:
         backgroundColor = const Color.fromARGB(235, 246, 255, 0);
         emoji = "😊"; // Happy emoji
-        moodText = "I’m Feeling Happy";
+        moodText = "I'm Feeling Happy";
         moodColor = Colors.yellow;
         break;
     }
@@ -156,6 +211,15 @@ class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
+          },
+        ),
         title: Text(
           "Hey $nickname!",
           style: const TextStyle(
@@ -174,7 +238,7 @@ class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
             const Text(
               "How are you feeling this day?",
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.w500,
                 color: Colors.white,
               ),
@@ -200,22 +264,28 @@ class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
             const SizedBox(height: 30),
             MoodSelectorButton(
               moodColor: moodColor,
-              onPressed: () {
-                Fluttertoast.showToast(
-                  msg: "Mood Update Successfully",
-                  toastLength: Toast.LENGTH_SHORT,
-                  gravity: ToastGravity.BOTTOM,
-                  backgroundColor: Colors.green,
-                  textColor: Colors.white,
-                  fontSize: 16.0,
-                );
-                _updateMoodInFirestore(mood); // Update mood in Firestore
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          const HomeScreen()), // Navigate to HomePage
-                );
+              onPressed: () async {
+                // Check if user can update mood
+                bool canUpdate = await _canUpdateMood();
+                if (canUpdate) {
+                  Fluttertoast.showToast(
+                    msg: "Mood Update Successfully",
+                    toastLength: Toast.LENGTH_SHORT,
+                    gravity: ToastGravity.BOTTOM,
+                    backgroundColor: Colors.green,
+                    textColor: Colors.white,
+                    fontSize: 16.0,
+                  );
+                  _updateMoodInFirestore(mood); // Update mood in Firestore
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) =>
+                            const HomeScreen()), // Navigate to HomePage
+                  );
+                } else {
+                  _showLimitWarning(context);
+                }
               },
               buttonText: "Mood Update",
             ),
@@ -225,7 +295,7 @@ class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => MoodHistoryScreen(),
+                    builder: (context) => const MoodHistoryScreen(),
                   ),
                 );
               },
@@ -239,12 +309,19 @@ class _MoodSelectorScreenState extends State<MoodSelectorScreen> {
                     const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
                 elevation: 5,
               ),
-              child: const Text(
-                "View Mood History",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.history),
+                  SizedBox(width: 8),
+                  Text(
+                    "View Mood History",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
             MoodSelectorBar(moodColor: moodColor),
@@ -360,7 +437,7 @@ class MoodSelectorBar extends StatelessWidget {
   }
 }
 
-// Add this function to check mood updates count
+// Add this function to check mood updates count for today
 Future<bool> _canUpdateMood() async {
   User? user = FirebaseAuth.instance.currentUser;
   if (user != null) {
@@ -378,7 +455,30 @@ Future<bool> _canUpdateMood() async {
         .where('timestamp', isLessThan: Timestamp.fromDate(endOfDay))
         .get();
 
-    return moodUpdates.docs.length < 2;
+    // Check if user has less than 3 updates today
+    return moodUpdates.docs.length < 3;
   }
   return false;
+}
+
+// Add this function to show warning message
+void _showLimitWarning(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Daily Limit Reached'),
+        content: const Text(
+            'You can only update your mood 3 times per day. Please try again tomorrow.'),
+        actions: <Widget>[
+          TextButton(
+            child: const Text('OK'),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
 }

@@ -1,10 +1,14 @@
 pluginManagement {
     def flutterSdkPath = {
         def properties = new Properties()
-        file("local.properties").withInputStream { properties.load(it) }
-        def flutterSdkPath = properties.getProperty("flutter.sdk")
-        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
-        return flutterSdkPath
+        def propertiesFile = new File(rootDir.parentFile, "local.properties")
+        if (propertiesFile.exists()) {
+            properties.load(new FileInputStream(propertiesFile))
+            properties.getProperty('flutter.sdk')
+        } else {
+            def env = System.getenv()
+            env.get('FLUTTER_ROOT')
+        }
     }()
 
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
@@ -13,6 +17,13 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+
+        def flutterPluginRepo = new File(flutterSdkPath + "/packages/flutter_tools/gradle")
+        if (flutterPluginRepo.exists()) {
+            flatDir {
+                dirs flutterPluginRepo
+            }
+        }
     }
 }
 
@@ -22,7 +33,23 @@ plugins {
     // START: FlutterFire Configuration
     id "com.google.gms.google-services" version "4.3.15" apply false
     // END: FlutterFire Configuration
-    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
+    id "org.jetbrains.kotlin.android" version "2.1.10" apply false
 }
 
 include ":app"
+
+def localPropertiesFile = new File(rootProject.projectDir, "local.properties")
+def properties = new Properties()
+
+assert localPropertiesFile.exists()
+localPropertiesFile.withReader("UTF-8") { reader -> properties.load(reader) }
+
+def flutterSdkPath = properties.getProperty("flutter.sdk")
+assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+
+// Add this to fix flutter_inappwebview namespace issue
+gradle.beforeProject { project ->
+    project.extensions.findByName('android')?.with { android ->
+        android.namespace = "com.example.moodapp"
+    }
+}

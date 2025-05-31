@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:moodapp/Services/auth_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -17,6 +18,7 @@ class _ProfilePageState extends State<ProfilePage>
   final TextEditingController nicknameController = TextEditingController();
   final TextEditingController genderController = TextEditingController();
   final TextEditingController ageController = TextEditingController();
+  final TextEditingController studentNumberController = TextEditingController();
   final TextEditingController departmentController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController currentPasswordController =
@@ -40,45 +42,65 @@ class _ProfilePageState extends State<ProfilePage>
   }
 
   void _loadProfileData() async {
-    var userDetails = await AuthService().getUserDetails();
-    setState(() {
-      nicknameController.text = userDetails['nickname'] ?? '';
-      genderController.text = userDetails['gender'] ?? '';
-      ageController.text = userDetails['age'] ?? '';
-      phoneNumberController.text = userDetails['phoneNumber'] ?? '';
-      departmentController.text = userDetails['department'] ?? '';
-      emailController.text = userDetails['email'] ?? '';
-    });
+    try {
+      User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+
+        if (userDoc.exists) {
+          Map<String, dynamic> userData =
+              userDoc.data() as Map<String, dynamic>;
+          setState(() {
+            nicknameController.text = userData['nickname'] ?? '';
+            genderController.text = userData['gender'] ?? '';
+            ageController.text = userData['age']?.toString() ?? '';
+            studentNumberController.text = userData['studentNumber'] ?? '';
+            phoneNumberController.text = userData['phoneNumber'] ?? '';
+            departmentController.text = userData['department'] ?? '';
+            emailController.text = userData['email'] ?? '';
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading profile data: $e');
+      Fluttertoast.showToast(
+        msg: 'Error loading profile data',
+        backgroundColor: Colors.red,
+      );
+    }
   }
 
   void _saveProfileData() async {
     if (_formKey.currentState?.validate() ?? false) {
-      String nickname = nicknameController.text;
-      String gender = genderController.text;
-      String age = ageController.text;
-      String phoneNumber = phoneNumberController.text;
-      String department = departmentController.text;
-      String email = emailController.text;
+      try {
+        User? currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .update({
+            'nickname': nicknameController.text,
+            'gender': genderController.text,
+            'age': ageController.text,
+            'phoneNumber': phoneNumberController.text,
+            'department': departmentController.text,
+          });
 
-      await AuthService().saveUserDetails({
-        'nickname': nickname,
-        'gender': gender,
-        'age': age,
-        'phoneNumber': phoneNumber,
-        'department': department,
-        'email': email,
-      });
-
-      Fluttertoast.showToast(
-        msg: 'Profile info saved successfully!',
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.black54,
-        textColor: Colors.white,
-        fontSize: 14.0,
-      );
-
-      setState(() {});
+          Fluttertoast.showToast(
+            msg: 'Profile updated successfully!',
+            backgroundColor: Colors.green,
+          );
+        }
+      } catch (e) {
+        print('Error updating profile: $e');
+        Fluttertoast.showToast(
+          msg: 'Error updating profile',
+          backgroundColor: Colors.red,
+        );
+      }
     }
   }
 
@@ -149,6 +171,7 @@ class _ProfilePageState extends State<ProfilePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Restore original simple CircleAvatar
           const Center(
             child: CircleAvatar(
               radius: 50,
@@ -174,6 +197,34 @@ class _ProfilePageState extends State<ProfilePage>
                 buildGenderDropdown(), // Add this line
                 const SizedBox(height: 10),
                 buildTextField('Age', ageController),
+                const SizedBox(height: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Student Number',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    TextFormField(
+                      controller: studentNumberController,
+                      readOnly: true, // Make student number read-only
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.grey[200],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                        hintText: 'Student Number',
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 buildTextField('phoneNumber', phoneNumberController),
                 const SizedBox(height: 10),

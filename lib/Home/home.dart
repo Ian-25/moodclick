@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,7 +24,8 @@ class MoodClickApp extends StatelessWidget {
         '/menu': (context) => const AppDrawer(), // Route to menu page
         '/notification': (context) =>
             const NotificationPage(), // Route to notification page
-        '/profile': (context) => const ProfileInfoScreen(), // Route to profile page
+        '/profile': (context) =>
+            const ProfileInfoScreen(), // Route to profile page
       },
     );
   }
@@ -34,21 +37,68 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const BurgerButton(), // Add drawer widget
       appBar: AppBar(
         title: const Text('FreeWall'),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () {
-            Navigator.pushNamed(context, '/menu'); // Navigate to menu page
+        leading: Builder(
+          // Add this Builder widget
+          builder: (BuildContext context) {
+            return IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            );
           },
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications),
-            onPressed: () {
-              Navigator.pushNamed(
-                  context, '/notifi'); // Navigate to notification page
-            },
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const NotificationPage()),
+                ),
+              ),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('notifications')
+                    .where('userId',
+                        isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                    .where('isRead', isEqualTo: false)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  final int unreadCount =
+                      snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+                  if (unreadCount == 0) return const SizedBox();
+
+                  return Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        unreadCount.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.person, color: Colors.blue),
@@ -80,6 +130,8 @@ class _MoodListState extends State<MoodList> {
       FirebaseFirestore.instance.collection('moods');
   String nickname = '';
   String selectedMood = '😊';
+  bool _isDisposed = false;
+  StreamSubscription<QuerySnapshot>? _moodSubscription;
 
   @override
   void initState() {
@@ -87,25 +139,72 @@ class _MoodListState extends State<MoodList> {
     _loadNickname();
   }
 
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _moodSubscription?.cancel();
+    _moodController.dispose();
+    super.dispose();
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (!_isDisposed && mounted) {
+      setState(fn);
+    }
+  }
+
   void _loadNickname() async {
-    var userDetails = await AuthService().getUserDetails();
-    setState(() {
-      nickname = userDetails['nickname'] ?? '';
-    });
+    if (_isDisposed) return;
+
+    try {
+      var userDetails = await AuthService().getUserDetails();
+      _safeSetState(() {
+        nickname = userDetails['nickname'] ?? '';
+      });
+    } catch (e) {
+      print('Error loading nickname: $e');
+    }
   }
 
   void _postMood() async {
+    if (_isDisposed) return;
+
     if (_moodController.text.isNotEmpty) {
       User? user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await _moodsCollection.add({
-          'nickname': nickname, // Use the user's nickname
-          'mood': selectedMood, // Use the selected mood emoji
-          'dateTime': DateTime.now().toString(),
-          'description': _moodController.text,
-          'cares': 0,
-        });
-        _moodController.clear();
+        try {
+          var userDetails = await AuthService().getUserDetails();
+          String currentNickname = userDetails['nickname'] ?? '';
+
+          if (currentNickname.isEmpty) {
+            if (!_isDisposed && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                      'Please set your nickname in profile before posting'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return;
+          }
+
+          await _moodsCollection.add({
+            'nickname': currentNickname,
+            'mood': selectedMood,
+            'dateTime': DateTime.now().toString(),
+            'description': _moodController.text,
+            'cares': 0,
+            'userId': user.uid,
+            'creatorNickname': currentNickname,
+          });
+
+          if (!_isDisposed) {
+            _moodController.clear();
+          }
+        } catch (e) {
+          print('Error posting mood: $e');
+        }
       }
     }
   }
@@ -256,17 +355,24 @@ class _MoodListState extends State<MoodList> {
                 .orderBy('dateTime', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
+              if (!mounted) return Container();
+
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
+
               final moods = snapshot.data!.docs
                   .map((doc) => MoodCardData.fromDocument(doc))
                   .toList();
+
               return ListView.builder(
                 itemCount: moods.length,
                 itemBuilder: (context, index) {
-                  return MoodCard(moods[index],
-                      onEdit: () => _showPostComposer(moodData: moods[index]));
+                  if (!mounted) return Container();
+                  return MoodCard(
+                    moods[index],
+                    onEdit: () => _showPostComposer(moodData: moods[index]),
+                  );
                 },
               );
             },
@@ -284,18 +390,31 @@ class MoodCardData {
   final String description;
   int cares;
   final String id;
+  final String userId;
+  final String creatorNickname; // Add creator's nickname
 
-  MoodCardData(this.nickname, this.mood, this.dateTime, this.description,
-      this.cares, this.id);
+  MoodCardData(
+    this.nickname,
+    this.mood,
+    this.dateTime,
+    this.description,
+    this.cares,
+    this.id,
+    this.userId,
+    this.creatorNickname, // Add to constructor
+  );
 
   factory MoodCardData.fromDocument(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return MoodCardData(
-      doc['nickname'],
-      doc['mood'],
-      doc['dateTime'],
-      doc['description'],
-      doc['cares'],
+      data['nickname'] ?? '',
+      data['mood'] ?? '',
+      data['dateTime'] ?? '',
+      data['description'] ?? '',
+      data['cares'] ?? 0,
       doc.id,
+      data['userId'] ?? '',
+      data['creatorNickname'] ?? '', // Get creator's nickname
     );
   }
 }
@@ -312,84 +431,213 @@ class MoodCard extends StatefulWidget {
 
 class _MoodCardState extends State<MoodCard> {
   bool _hasReacted = false;
+  bool _isPostOwner = false;
+  String _currentUserNickname = '';
+  bool _isDisposed = false; // Add this line
+  StreamSubscription? _reactionSubscription; // Add this line
+  StreamSubscription? _ownershipSubscription; // Add this line
 
   @override
   void initState() {
     super.initState();
     _checkUserReaction();
+    _checkPostOwnership();
+    _loadCurrentUserNickname();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _reactionSubscription?.cancel(); // Cancel subscriptions
+    _ownershipSubscription?.cancel();
+    super.dispose();
+  }
+
+  // Safe setState wrapper
+  void _safeSetState(VoidCallback fn) {
+    if (!_isDisposed && mounted) {
+      setState(fn);
+    }
+  }
+
+  void _loadCurrentUserNickname() async {
+    if (_isDisposed) return;
+
+    try {
+      var userDetails = await AuthService().getUserDetails();
+      _safeSetState(() {
+        _currentUserNickname = userDetails['nickname'] ?? '';
+      });
+    } catch (e) {
+      print('Error loading nickname: $e');
+    }
   }
 
   void _checkUserReaction() async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      DocumentSnapshot doc = await FirebaseFirestore.instance
+      _reactionSubscription = FirebaseFirestore.instance
           .collection('moods')
           .doc(widget.data.id)
           .collection('reactions')
           .doc(user.uid)
-          .get();
-      if (mounted) {
-        // Add this check
-        setState(() {
+          .snapshots()
+          .listen((doc) {
+        _safeSetState(() {
           _hasReacted = doc.exists;
         });
-      }
+      });
+    }
+  }
+
+  void _checkPostOwnership() async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      _ownershipSubscription = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .snapshots()
+          .listen((userDoc) {
+        _safeSetState(() {
+          _isPostOwner = widget.data.userId == currentUser.uid;
+        });
+      });
     }
   }
 
   void _toggleReaction() async {
+    if (_isDisposed) return;
+
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      DocumentReference reactionRef = FirebaseFirestore.instance
-          .collection('moods')
-          .doc(widget.data.id)
-          .collection('reactions')
-          .doc(user.uid);
+      try {
+        // References for batch operation
+        final moodRef =
+            FirebaseFirestore.instance.collection('moods').doc(widget.data.id);
+        final reactionRef = moodRef.collection('reactions').doc(user.uid);
 
-      if (_hasReacted) {
-        await reactionRef.delete();
-        if (mounted) {
-          // Add this check
-          setState(() {
-            widget.data.cares -= 1;
-            _hasReacted = false;
+        WriteBatch batch = FirebaseFirestore.instance.batch();
+
+        if (_hasReacted) {
+          // Remove reaction
+          batch.delete(reactionRef);
+          batch.update(moodRef, {'cares': FieldValue.increment(-1)});
+
+          if (!_isDisposed) {
+            _safeSetState(() {
+              widget.data.cares -= 1;
+              _hasReacted = false;
+            });
+          }
+        } else {
+          // Add reaction
+          batch.set(reactionRef, {
+            'userId': user.uid,
+            'timestamp': FieldValue.serverTimestamp(),
+            'userNickname': _currentUserNickname,
+          });
+
+          batch.update(moodRef, {'cares': FieldValue.increment(1)});
+
+          // Create notification for post owner
+          if (user.uid != widget.data.userId) {
+            // Don't notify if reacting to own post
+            DocumentReference notificationRef =
+                FirebaseFirestore.instance.collection('notifications').doc();
+
+            batch.set(notificationRef, {
+              'type': 'reaction',
+              'userId': widget.data.userId,
+              'postId': widget.data.id,
+              'reactorId': user.uid,
+              'reactorName': _currentUserNickname,
+              'timestamp': FieldValue.serverTimestamp(),
+              'isRead': false,
+              'message': '$_currentUserNickname reacted to your post'
+            });
+          }
+
+          if (!_isDisposed) {
+            _safeSetState(() {
+              widget.data.cares += 1;
+              _hasReacted = true;
+            });
+          }
+        }
+
+        await batch.commit();
+      } catch (e) {
+        print('Error toggling reaction: $e');
+        // Revert local state if operation failed
+        if (!_isDisposed) {
+          _safeSetState(() {
+            widget.data.cares =
+                _hasReacted ? widget.data.cares - 1 : widget.data.cares + 1;
+            _hasReacted = !_hasReacted;
           });
         }
-      } else {
-        await reactionRef.set({'reacted': true});
-        if (mounted) {
-          // Add this check
-          setState(() {
-            widget.data.cares += 1;
-            _hasReacted = true;
-          });
-        }
-        sendNotification(widget.data.id, widget.data.nickname,
-            'reacted to your post'); // Send notification
       }
-
-      await FirebaseFirestore.instance
-          .collection('moods')
-          .doc(widget.data.id)
-          .update({'cares': widget.data.cares});
     }
   }
 
-  void sendNotification(String postId, String nickname, String message) async {
-    await FirebaseFirestore.instance.collection('notifications').add({
-      'postOwnerId': FirebaseAuth.instance.currentUser!.uid,
-      'reactingUserId': nickname,
-      'reaction': message,
-      'postTitle': postId,
-      'timestamp': Timestamp.now(),
-    });
+  void sendNotification(String postId, String nickname, String message) {
+    // Implement your notification logic here
+    print('Notification sent: $nickname $message');
   }
 
-  void _deletePost() async {
-    await FirebaseFirestore.instance
-        .collection('moods')
-        .doc(widget.data.id)
-        .delete();
+  Future<void> _handleEdit() async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null && widget.data.userId == currentUser.uid) {
+      widget.onEdit();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can only edit posts you created'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleDelete() async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null && widget.data.userId == currentUser.uid) {
+      // Show confirmation dialog
+      bool? confirmDelete = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Delete Post'),
+            content: const Text('Are you sure you want to delete this post?'),
+            actions: <Widget>[
+              TextButton(
+                child: const Text('Cancel'),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+              TextButton(
+                child:
+                    const Text('Delete', style: TextStyle(color: Colors.red)),
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmDelete == true) {
+        await FirebaseFirestore.instance
+            .collection('moods')
+            .doc(widget.data.id)
+            .delete();
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can only delete posts you created'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -402,9 +650,63 @@ class _MoodCardState extends State<MoodCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '${widget.data.nickname} - ${widget.data.mood}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${widget.data.nickname} - ${widget.data.mood}',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                StreamBuilder<User?>(
+                  stream: FirebaseAuth.instance.authStateChanges(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData && snapshot.data != null) {
+                      final currentUser = snapshot.data!;
+                      if (widget.data.userId == currentUser.uid) {
+                        return PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              _handleEdit();
+                            } else if (value == 'delete') {
+                              _handleDelete();
+                            }
+                          },
+                          itemBuilder: (BuildContext context) {
+                            return [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit, color: Colors.blue),
+                                    SizedBox(width: 8),
+                                    Text('Edit'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete, color: Colors.red),
+                                    SizedBox(width: 8),
+                                    Text('Delete'),
+                                  ],
+                                ),
+                              ),
+                            ];
+                          },
+                        );
+                      }
+                    }
+                    return const SizedBox
+                        .shrink(); // Return empty widget if not owner
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 5),
             Text(widget.data.dateTime,
@@ -416,49 +718,12 @@ class _MoodCardState extends State<MoodCard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('${widget.data.cares} Heart'),
-                Row(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _toggleReaction,
-                      icon: Icon(
-                        _hasReacted ? Icons.favorite : Icons.favorite_border,
-                      ),
-                      label: const Text('Heart'),
-                    ),
-                    PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'edit') {
-                          widget.onEdit();
-                        } else if (value == 'delete') {
-                          _deletePost();
-                        }
-                      },
-                      itemBuilder: (BuildContext context) {
-                        return [
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text('Edit'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Delete'),
-                              ],
-                            ),
-                          ),
-                        ];
-                      },
-                    ),
-                  ],
+                ElevatedButton.icon(
+                  onPressed: _toggleReaction,
+                  icon: Icon(
+                    _hasReacted ? Icons.favorite : Icons.favorite_border,
+                  ),
+                  label: const Text('Heart'),
                 ),
               ],
             ),

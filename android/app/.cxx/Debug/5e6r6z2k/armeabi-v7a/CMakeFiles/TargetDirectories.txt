@@ -1,0 +1,2 @@
+C:/moodproject/moodapp/android/app/.cxx/Debug/5e6r6z2k/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/moodproject/moodapp/android/app/.cxx/Debug/5e6r6z2k/armeabi-v7a/CMakeFiles/rebuild_cache.dir

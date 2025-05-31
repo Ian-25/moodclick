@@ -95,43 +95,33 @@ class RegisterScreen extends StatelessWidget {
   // Register User and Save to Firestore
   Future<void> _registerUser(BuildContext context) async {
     try {
-      // Authenticate user with Firebase
-      UserCredential userCredential = (await AuthService().signup(
-        email: emailController.text,
+      if (!_formKey.currentState!.validate()) {
+        return;
+      }
+
+      Map<String, dynamic> userData = {
+        'nickname': nicknameController.text.trim(),
+        'gender': genderController.text.trim(),
+        'age': ageController.text.trim(),
+        'phoneNumber': phoneNumbweController.text.trim(),
+        'studentNumber': studentNumberController.text.trim(),
+        'department': departmentController.text.trim(),
+      };
+
+      await AuthService().signup(
+        email: emailController.text.trim(),
         password: passwordController.text,
         context: context,
-      )) as UserCredential;
-
-      // Save additional user details to Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user?.uid)
-          .set({
-        'nickname': nicknameController.text,
-        'gender': genderController.text,
-        'age': ageController.text,
-        'phoneNumber': phoneNumbweController.text,
-        'studentNumber': studentNumberController.text,
-        'department': departmentController.text,
-        'email': emailController.text,
-        'uid': userCredential.user?.uid,
-        'created_at': Timestamp.now(),
-      });
-
-      Fluttertoast.showToast(
-        msg: "Registration successful!",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
-        fontSize: 16.0,
+        userData: userData,
       );
 
-      // Navigate to home or login screen after registration
-      Navigator.pop(context);
+      if (context.mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
     } catch (e) {
       Fluttertoast.showToast(
-        msg: ": $e",
+        msg: "Registration error: ${e.toString()}",
+        backgroundColor: Colors.red,
       );
     }
   }
